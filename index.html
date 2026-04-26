@@ -367,7 +367,7 @@ div[style*="flex-wrap:wrap"] {
   </div>
 
   <!-- Stats Row -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:20px 24px 0;">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;padding:20px 24px 0;">
     <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e2e8f0;text-align:center;">
       <div id="stat-total" style="font-size:28px;font-weight:900;color:#3b82f6;">–</div>
       <div style="font-size:11px;color:#64748b;font-weight:600;margin-top:4px;">Total Users</div>
@@ -383,6 +383,10 @@ div[style*="flex-wrap:wrap"] {
     <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e2e8f0;text-align:center;">
       <div id="stat-today" style="font-size:28px;font-weight:900;color:#7c3aed;">–</div>
       <div style="font-size:11px;color:#64748b;font-weight:600;margin-top:4px;">Joined Today</div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #fca5a5;text-align:center;">
+      <div id="stat-paused" style="font-size:28px;font-weight:900;color:#ef4444;">–</div>
+      <div style="font-size:11px;color:#64748b;font-weight:600;margin-top:4px;">Paused</div>
     </div>
   </div>
 
@@ -404,6 +408,7 @@ div[style*="flex-wrap:wrap"] {
               <th style="padding:10px 16px;text-align:left;color:#64748b;font-weight:700;border-bottom:1px solid #e2e8f0;">STATUS</th>
               <th style="padding:10px 16px;text-align:left;color:#64748b;font-weight:700;border-bottom:1px solid #e2e8f0;">JOINED</th>
               <th style="padding:10px 16px;text-align:left;color:#64748b;font-weight:700;border-bottom:1px solid #e2e8f0;">LAST LOGIN</th>
+              <th style="padding:10px 16px;text-align:left;color:#64748b;font-weight:700;border-bottom:1px solid #e2e8f0;">ACTIONS</th>
             </tr>
           </thead>
           <tbody id="admin-users-table">
@@ -452,6 +457,31 @@ div[style*="flex-wrap:wrap"] {
       onmouseenter="this.style.background='#fff5f5'" onmouseleave="this.style.background=''">
       ↩ Sign Out
     </div>
+  </div>
+</div>
+
+
+<!-- ── PAUSED ACCOUNT SCREEN ──────────────────────────────────── -->
+<div id="paused-screen" style="
+  position:fixed;inset:0;z-index:99997;
+  background:linear-gradient(135deg,#fff7ed,#fff1f2);
+  display:none;align-items:center;justify-content:center;
+  font-family:'Inter','Segoe UI',sans-serif;">
+  <div style="text-align:center;max-width:420px;padding:32px;background:#fff;border-radius:16px;border:1px solid #fca5a5;box-shadow:0 8px 32px rgba(239,68,68,0.12);">
+    <div style="font-size:52px;margin-bottom:16px;">⏸</div>
+    <div style="font-size:20px;font-weight:800;color:#dc2626;margin-bottom:8px;">Account Paused</div>
+    <div style="font-size:13px;color:#475569;margin-bottom:6px;line-height:1.6;">
+      Hello <strong id="paused-name"></strong>,<br>
+      your access to DevOps Academy has been temporarily paused.
+    </div>
+    <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin:16px 0;">
+      📧 Contact your administrator to restore access.<br>
+      <span id="paused-email" style="font-weight:700;"></span>
+    </div>
+    <button onclick="authLogout()"
+      style="width:100%;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;">
+      ← Sign Out
+    </button>
   </div>
 </div>
 
@@ -4382,18 +4412,50 @@ function showScreen(screen) {
 }
 
 function showPortal(user) {
-  // Hide all auth screens
+  // Check if user is paused BEFORE showing portal
+  _db.collection('users').doc(user.uid).get()
+    .then(function(doc) {
+      if (doc.exists && doc.data().paused === true) {
+        // Show paused screen instead of portal
+        showPausedScreen(user, doc.data());
+        return;
+      }
+      // Normal login — show portal
+      document.getElementById('auth-screen').style.display   = 'none';
+      document.getElementById('verify-screen').style.display = 'none';
+      var pausedEl = document.getElementById('paused-screen');
+      if (pausedEl) pausedEl.style.display = 'none';
+      var wrap = document.getElementById('wrap');
+      if (wrap) wrap.style.display = '';
+      setupUserPill(user);
+      var name = user.displayName || user.email.split('@')[0];
+      showToast('Welcome back, ' + name + '! 👋', '#22c55e');
+    })
+    .catch(function() {
+      // If can't check (first login / no record), show portal normally
+      document.getElementById('auth-screen').style.display   = 'none';
+      document.getElementById('verify-screen').style.display = 'none';
+      var wrap = document.getElementById('wrap');
+      if (wrap) wrap.style.display = '';
+      setupUserPill(user);
+      var name = user.displayName || user.email.split('@')[0];
+      showToast('Welcome back, ' + name + '! 👋', '#22c55e');
+    });
+}
+
+function showPausedScreen(user, data) {
   document.getElementById('auth-screen').style.display   = 'none';
   document.getElementById('verify-screen').style.display = 'none';
   var wrap = document.getElementById('wrap');
-  if (wrap) wrap.style.display = '';
-
-  // Show user pill in topbar
-  setupUserPill(user);
-
-  // Welcome toast
-  var name = user.displayName || user.email.split('@')[0];
-  showToast('Welcome back, ' + name + '! 👋', '#22c55e');
+  if (wrap) wrap.style.display = 'none';
+  var ps = document.getElementById('paused-screen');
+  if (ps) {
+    ps.style.display = 'flex';
+    var nameEl = document.getElementById('paused-name');
+    if (nameEl) nameEl.textContent = user.displayName || user.email.split('@')[0];
+    var emailEl = document.getElementById('paused-email');
+    if (emailEl) emailEl.textContent = user.email;
+  }
 }
 
 // ── AUTH TAB TOGGLE ───────────────────────────────────────────────
@@ -4650,7 +4712,7 @@ function adminRefresh() {
 
 function adminLoadUsers() {
   var tbody = document.getElementById('admin-users-table');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8;">Loading...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#94a3b8;">Loading...</td></tr>';
 
   _db.collection('users').orderBy('joinedAt', 'desc').get()
     .then(function(snap) {
@@ -4660,18 +4722,20 @@ function adminLoadUsers() {
 
       // Update stats
       var today = new Date().toDateString();
-      var verified = _allUsers.filter(function(u){ return u.verified; }).length;
-      var pending  = _allUsers.filter(function(u){ return !u.verified; }).length;
+      var verified = _allUsers.filter(function(u){ return u.verified && !u.paused; }).length;
+      var pending  = _allUsers.filter(function(u){ return !u.verified && !u.paused; }).length;
+      var paused   = _allUsers.filter(function(u){ return u.paused; }).length;
       var todayCount = _allUsers.filter(function(u){
         if (!u.joinedAt) return false;
         var d = u.joinedAt.toDate ? u.joinedAt.toDate() : new Date(u.joinedAt);
         return d.toDateString() === today;
       }).length;
 
-      var st = document.getElementById('stat-total');    if (st) st.textContent = _allUsers.length;
-      var sv = document.getElementById('stat-verified'); if (sv) sv.textContent = verified;
-      var sp = document.getElementById('stat-pending');  if (sp) sp.textContent = pending;
-      var sd = document.getElementById('stat-today');    if (sd) sd.textContent = todayCount;
+      var st  = document.getElementById('stat-total');    if (st)  st.textContent = _allUsers.length;
+      var sv  = document.getElementById('stat-verified'); if (sv)  sv.textContent = verified;
+      var sp  = document.getElementById('stat-pending');  if (sp)  sp.textContent = pending;
+      var sd  = document.getElementById('stat-today');    if (sd)  sd.textContent = todayCount;
+      var spa = document.getElementById('stat-paused');   if (spa) spa.textContent = paused;
     })
     .catch(function(err) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#ef4444;">Error: ' + err.message + '</td></tr>';
@@ -4682,7 +4746,7 @@ function adminRenderUsers(users) {
   var tbody = document.getElementById('admin-users-table');
   if (!tbody) return;
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#94a3b8;">No users registered yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:30px;text-align:center;color:#94a3b8;">No users registered yet</td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, i) {
@@ -4691,9 +4755,11 @@ function adminRenderUsers(users) {
     var isAdmin = u.email === ADMIN_EMAIL;
     var badge   = isAdmin
       ? '<span style="background:#fef3c7;color:#d97706;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">👑 Admin</span>'
-      : u.verified
-        ? '<span style="background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Verified</span>'
-        : '<span style="background:#fff7ed;color:#ea580c;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ Pending</span>';
+      : u.paused
+        ? '<span style="background:#fff1f2;color:#ef4444;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">⏸ Paused</span>'
+        : u.verified
+          ? '<span style="background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">✅ Verified</span>'
+          : '<span style="background:#fff7ed;color:#ea580c;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ Pending</span>';
     var initials = (u.name || u.email.split('@')[0]).slice(0,2).toUpperCase();
     return '<tr style="border-bottom:1px solid #f1f5f9;">' +
       '<td style="padding:12px 16px;color:#94a3b8;">' + (i+1) + '</td>' +
@@ -4707,6 +4773,15 @@ function adminRenderUsers(users) {
       '<td style="padding:12px 16px;">' + badge + '</td>' +
       '<td style="padding:12px 16px;color:#64748b;">' + joined + '</td>' +
       '<td style="padding:12px 16px;color:#64748b;">' + lastLogin + '</td>' +
+      '<td style="padding:10px 16px;">' +
+        (isAdmin ? '<span style="font-size:11px;color:#94a3b8;">You</span>' :
+          (function(uid, email, isPaused) {
+            var resumeBtn = '<button onclick="adminResumeUser(this)" data-uid="' + uid + '" data-email="' + email + '" style="background:#dcfce7;color:#16a34a;border:1px solid #86efac;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">&#9654; Resume</button>';
+            var pauseBtn  = '<button onclick="adminPauseUser(this)" data-uid="'  + uid + '" data-email="' + email + '" style="background:#fff7ed;color:#ea580c;border:1px solid #fdba74;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">&#9646;&#9646; Pause</button>';
+            var deleteBtn = '<button onclick="adminDeleteUser(this)" data-uid="' + uid + '" data-email="' + email + '" style="background:#fff1f2;color:#ef4444;border:1px solid #fca5a5;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">&#128465; Remove</button>';
+            return '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + (isPaused ? resumeBtn : pauseBtn) + deleteBtn + '</div>';
+          })(u.uid, u.email, u.paused)
+        ) +
     '</tr>';
   }).join('');
 }
@@ -4743,6 +4818,54 @@ function showToast(msg, color) {
   if (wrap) wrap.style.display = 'none';
   // Auth screen already visible by default
 })();
+
+
+// ── PAUSE USER (blocks portal access) ───────────────────────────
+function adminPauseUser(btn) {
+  var uid = btn.dataset.uid, email = btn.dataset.email;
+  if (!confirm('Pause access for ' + email + '?\n\nThis user will see a "Account Paused" message when they login. You can resume anytime.')) return;
+
+  _db.collection('users').doc(uid).update({
+    paused: true,
+    pausedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    pausedBy: _currentUser ? _currentUser.email : 'admin'
+  })
+  .then(function() {
+    showToast('⏸ ' + email + ' paused', '#f59e0b');
+    adminLoadUsers();
+  })
+  .catch(function(err) { alert('Error: ' + err.message); });
+}
+
+// ── RESUME USER (restores portal access) ────────────────────────
+function adminResumeUser(btn) {
+  var uid = btn.dataset.uid, email = btn.dataset.email;
+  if (!confirm('Resume access for ' + email + '?\n\nThis user will be able to login again.')) return;
+
+  _db.collection('users').doc(uid).update({
+    paused: false,
+    resumedAt: firebase.firestore.FieldValue.serverTimestamp()
+  })
+  .then(function() {
+    showToast('✅ ' + email + ' access restored', '#22c55e');
+    adminLoadUsers();
+  })
+  .catch(function(err) { alert('Error: ' + err.message); });
+}
+
+// ── DELETE USER from Firestore (removes their data) ─────────────
+// Note: Deletes Firestore record. User can re-register unless blocked in Auth.
+function adminDeleteUser(btn) {
+  var uid = btn.dataset.uid, email = btn.dataset.email;
+  if (!confirm('Permanently REMOVE ' + email + '?\n\n⚠️ This deletes their data from the database.\nTo also block re-registration, manually disable in Firebase Console → Authentication → Users.')) return;
+
+  _db.collection('users').doc(uid).delete()
+  .then(function() {
+    showToast('🗑 ' + email + ' removed', '#ef4444');
+    adminLoadUsers();
+  })
+  .catch(function(err) { alert('Error: ' + err.message); });
+}
 
 </script>
 </body>
