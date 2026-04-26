@@ -1586,48 +1586,302 @@ function renderNotesSection() {
   var ci = document.getElementById('ci');
   if (!ci) return;
 
-  var isAdmin = _currentUser && _currentUser.email === (typeof ADMIN_EMAIL !== 'undefined' ? ADMIN_EMAIL : '');
+  var isAdmin = _currentUser && _currentUser.email === ADMIN_EMAIL;
 
-  ci.innerHTML = '<div style="max-width:860px;margin:0 auto;padding:8px 0;">' +
-    // Header
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
+  // ── Load saved GitHub config (repo + folder) ────────────────
+  var savedCfg = {};
+  try { savedCfg = JSON.parse(localStorage.getItem('devops_notes_cfg') || '{}'); } catch(e) {}
+
+  ci.innerHTML =
+    '<div style="max-width:900px;margin:0 auto;padding:8px 0;">' +
+
+    // ── PAGE HEADER ─────────────────────────────────────────────
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">' +
       '<div>' +
-        '<div style="font-size:20px;font-weight:800;color:#0f172a;">📋 Course Notes</div>' +
+        '<div style="font-size:20px;font-weight:800;color:#0f172a;">📂 Course Files & Notes</div>' +
         '<div style="font-size:12px;color:#64748b;margin-top:3px;">' +
-          (isAdmin ? '👑 Admin Mode — You can add, edit and delete notes' : '🎓 Student View — Read-only notes from your instructor') +
+          (isAdmin
+            ? '👑 Admin — configure your GitHub repo below, students will see all files'
+            : '🎓 Your instructor\'s files — click any file to view or download') +
         '</div>' +
       '</div>' +
-      (isAdmin ? '<button onclick="notesOpenAdd()" style="background:#0f766e;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">+ Add Note</button>' : '') +
+      '<button onclick="notesRefresh()" style="background:#f1f5f9;color:#374151;border:1px solid #e2e8f0;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;">🔄 Refresh</button>' +
     '</div>' +
 
-    // Add/Edit form (admin only, hidden by default)
-    (isAdmin ? '<div id="note-form" style="display:none;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;padding:20px;margin-bottom:20px;">' +
-      '<div style="font-size:14px;font-weight:700;color:#0f766e;margin-bottom:14px;" id="note-form-title">Add New Note</div>' +
-      '<input id="note-title" placeholder="Note title (e.g. Linux Commands Summary)" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:10px;box-sizing:border-box;outline:none;" onfocus="this.style.borderColor=\'#0f766e\'" onblur="this.style.borderColor=\'#e2e8f0\'" />' +
-      '<select id="note-category" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:10px;box-sizing:border-box;outline:none;background:#fff;">' +
-        '<option value="General">📌 General</option>' +
-        '<option value="Linux">🐧 Linux</option>' +
-        '<option value="AWS">☁️ AWS</option>' +
-        '<option value="Docker">🐳 Docker</option>' +
-        '<option value="Kubernetes">☸️ Kubernetes</option>' +
-        '<option value="Git">🐙 Git</option>' +
-        '<option value="Python">🐍 Python</option>' +
-        '<option value="DevOps">🔧 DevOps</option>' +
-        '<option value="Important">⚠️ Important</option>' +
-      '</select>' +
-      '<textarea id="note-body" placeholder="Write your note here... supports markdown-style text" rows="8" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;resize:vertical;box-sizing:border-box;outline:none;font-family:inherit;" onfocus="this.style.borderColor=\'#0f766e\'" onblur="this.style.borderColor=\'#e2e8f0\'"></textarea>' +
-      '<div style="display:flex;gap:10px;margin-top:12px;">' +
-        '<button onclick="notesSave()" style="background:#0f766e;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save Note</button>' +
-        '<button onclick="notesCloseForm()" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;padding:10px 18px;font-size:13px;cursor:pointer;">Cancel</button>' +
+    // ── ADMIN CONFIG PANEL ──────────────────────────────────────
+    (isAdmin ?
+      '<div id="notes-cfg" style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;padding:18px 20px;margin-bottom:20px;">' +
+        '<div style="font-size:13px;font-weight:700;color:#0f766e;margin-bottom:12px;">⚙️ GitHub Repository Settings</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
+          '<div>' +
+            '<label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px;">GITHUB REPO <span style="color:#ef4444;">*</span></label>' +
+            '<input id="notes-repo" placeholder="username/repository-name" value="' + (savedCfg.repo||'') + '" ' +
+              'style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13px;box-sizing:border-box;outline:none;" ' +
+              'onfocus="this.style.borderColor=\'#0f766e\'" onblur="this.style.borderColor=\'#e2e8f0\'" />' +
+            '<div style="font-size:10px;color:#64748b;margin-top:3px;">e.g. ganraj/devops-academy</div>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px;">FOLDER PATH <span style="color:#ef4444;">*</span></label>' +
+            '<input id="notes-folder" placeholder="my-notes" value="' + (savedCfg.folder||'my-notes') + '" ' +
+              'style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13px;box-sizing:border-box;outline:none;" ' +
+              'onfocus="this.style.borderColor=\'#0f766e\'" onblur="this.style.borderColor=\'#e2e8f0\'" />' +
+            '<div style="font-size:10px;color:#64748b;margin-top:3px;">folder name inside your repo</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-bottom:12px;">' +
+          '<label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px;">BRANCH</label>' +
+          '<input id="notes-branch" placeholder="main" value="' + (savedCfg.branch||'main') + '" ' +
+            'style="width:200px;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13px;box-sizing:border-box;outline:none;" ' +
+            'onfocus="this.style.borderColor=\'#0f766e\'" onblur="this.style.borderColor=\'#e2e8f0\'" />' +
+        '</div>' +
+        '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;font-size:11px;color:#92400e;margin-bottom:12px;line-height:1.6;">' +
+          '📌 <strong>How to add files:</strong> Go to your GitHub repo → open the <code style="background:#fef3c7;padding:1px 4px;border-radius:3px;">my-notes</code> folder → click "Add file" → upload your PDF or create a .md file. Changes appear here automatically when you click Refresh.' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;">' +
+          '<button onclick="notesSaveCfg()" style="background:#0f766e;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save & Load Files</button>' +
+          '<button onclick="notesToggleCfg()" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;">Hide Settings</button>' +
+        '</div>' +
       '</div>' +
-      '<input type="hidden" id="note-edit-id" value="" />' +
-    '</div>' : '') +
+    '<div id="notes-cfg-mini" style="display:none;margin-bottom:16px;">' +
+      '<button onclick="notesToggleCfg()" style="background:#f1f5f9;color:#0f766e;border:1px solid #99f6e4;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">⚙️ Repo: ' + (savedCfg.repo||'not set') + ' / ' + (savedCfg.folder||'my-notes') + '</button>' +
+    '</div>'
+    : '') +
 
-    // Notes list
-    '<div id="notes-list"><div style="text-align:center;padding:40px;color:#94a3b8;">⏳ Loading notes...</div></div>' +
+    // ── FILES LIST ──────────────────────────────────────────────
+    '<div id="notes-file-list"><div style="text-align:center;padding:48px 20px;">' +
+      '<div style="font-size:40px;margin-bottom:12px;">📂</div>' +
+      '<div style="font-size:14px;font-weight:600;color:#64748b;">' +
+        (isAdmin ? 'Enter your GitHub repo details above and click "Save & Load Files"' : 'Loading files...') +
+      '</div>' +
+    '</div></div>' +
+
+    // ── FILE CONTENT VIEWER ─────────────────────────────────────
+    '<div id="notes-viewer" style="display:none;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:16px;">' +
+      '<div style="background:#f8fafc;padding:12px 18px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;">' +
+        '<div style="font-size:13px;font-weight:700;color:#0f172a;" id="notes-viewer-title">File</div>' +
+        '<button onclick="notesCloseViewer()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#94a3b8;padding:0 4px;">✕</button>' +
+      '</div>' +
+      '<div id="notes-viewer-body" style="padding:24px;max-height:600px;overflow-y:auto;font-size:13px;line-height:1.8;color:#334155;"></div>' +
+    '</div>' +
+
+    '</div>';
+
+  // Auto-load if config already saved
+  if (savedCfg.repo && savedCfg.folder) {
+    notesLoadFiles(savedCfg);
+  }
+}
+
+// ── SAVE CONFIG & LOAD FILES ──────────────────────────────────────
+function notesSaveCfg() {
+  var repo   = (document.getElementById('notes-repo')   || {}).value || '';
+  var folder = (document.getElementById('notes-folder') || {}).value || 'my-notes';
+  var branch = (document.getElementById('notes-branch') || {}).value || 'main';
+
+  repo = repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+  if (!repo) { showToast('Please enter your GitHub repo name', '#ef4444'); return; }
+
+  var cfg = { repo: repo, folder: folder, branch: branch };
+  localStorage.setItem('devops_notes_cfg', JSON.stringify(cfg));
+  showToast('✅ Settings saved', '#0f766e');
+  notesLoadFiles(cfg);
+}
+
+// ── TOGGLE CONFIG PANEL ───────────────────────────────────────────
+function notesToggleCfg() {
+  var full  = document.getElementById('notes-cfg');
+  var mini  = document.getElementById('notes-cfg-mini');
+  if (!full) return;
+  var showing = full.style.display !== 'none';
+  full.style.display  = showing ? 'none' : 'block';
+  if (mini) mini.style.display = showing ? 'block' : 'none';
+}
+
+// ── LOAD FILES FROM GITHUB API ────────────────────────────────────
+function notesLoadFiles(cfg) {
+  var listEl = document.getElementById('notes-file-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">⏳ Fetching files from GitHub...</div>';
+
+  var url = 'https://api.github.com/repos/' + cfg.repo + '/contents/' + cfg.folder;
+  if (cfg.branch && cfg.branch !== 'main') url += '?ref=' + cfg.branch;
+
+  fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } })
+    .then(function(res) {
+      if (!res.ok) {
+        return res.json().then(function(j) {
+          throw new Error(j.message || 'GitHub API error ' + res.status);
+        });
+      }
+      return res.json();
+    })
+    .then(function(items) {
+      var files = items.filter(function(f) { return f.type === 'file'; });
+      if (!files.length) {
+        listEl.innerHTML = '<div style="text-align:center;padding:40px;">' +
+          '<div style="font-size:36px;margin-bottom:12px;">📭</div>' +
+          '<div style="font-size:14px;font-weight:600;color:#64748b;">No files in this folder yet</div>' +
+          '<div style="font-size:12px;color:#94a3b8;margin-top:6px;">Add PDF or MD files to <strong>' + cfg.folder + '</strong> in your GitHub repo</div>' +
+          '</div>';
+        return;
+      }
+      notesRenderFileList(files, cfg);
+    })
+    .catch(function(err) {
+      listEl.innerHTML = '<div style="background:#fff1f2;border:1px solid #fca5a5;border-radius:10px;padding:20px;text-align:center;">' +
+        '<div style="font-size:24px;margin-bottom:8px;">❌</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#dc2626;">Could not load files</div>' +
+        '<div style="font-size:12px;color:#ef4444;margin-top:6px;">' + err.message + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:10px;">Check that your repo is <strong>public</strong> and the folder name is correct</div>' +
+        '</div>';
+    });
+}
+
+// ── RENDER FILE LIST ──────────────────────────────────────────────
+function notesRenderFileList(files, cfg) {
+  var listEl = document.getElementById('notes-file-list');
+  if (!listEl) return;
+
+  // Sort: md first, then pdf, then others alphabetically
+  files.sort(function(a, b) {
+    var extA = a.name.split('.').pop().toLowerCase();
+    var extB = b.name.split('.').pop().toLowerCase();
+    var order = { md: 0, markdown: 0, pdf: 1 };
+    var oa = order[extA] !== undefined ? order[extA] : 2;
+    var ob = order[extB] !== undefined ? order[extB] : 2;
+    if (oa !== ob) return oa - ob;
+    return a.name.localeCompare(b.name);
+  });
+
+  var html = '<div style="display:grid;gap:10px;">';
+
+  files.forEach(function(file) {
+    var ext  = file.name.split('.').pop().toLowerCase();
+    var name = file.name.replace(/\.[^.]+$/, ''); // name without extension
+    var size = file.size > 1024
+      ? (file.size > 1048576 ? (file.size/1048576).toFixed(1)+' MB' : (file.size/1024).toFixed(0)+' KB')
+      : file.size + ' B';
+
+    var icon  = ext === 'pdf' ? '📄' : ext === 'md' || ext === 'markdown' ? '📝' : '📎';
+    var color = ext === 'pdf' ? '#ef4444' : ext === 'md' || ext === 'markdown' ? '#0f766e' : '#64748b';
+    var badge = ext.toUpperCase();
+    var badgeBg = ext === 'pdf' ? '#fff1f2' : ext === 'md' || ext === 'markdown' ? '#f0fdfa' : '#f8fafc';
+    var badgeColor = ext === 'pdf' ? '#dc2626' : ext === 'md' || ext === 'markdown' ? '#0f766e' : '#64748b';
+
+    var viewBtn = '';
+    var dlBtn   = '';
+
+    if (ext === 'md' || ext === 'markdown') {
+      viewBtn = '<button onclick="notesViewMd(\'' + encodeURIComponent(file.download_url) + '\',\'' + file.name.replace(/'/g,"\\'") + '\')" ' +
+        'style="background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;">👁 View</button>';
+    }
+    if (ext === 'pdf') {
+      viewBtn = '<a href="' + file.download_url + '" target="_blank" ' +
+        'style="background:#fff1f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;">👁 Open PDF</a>';
+    }
+    dlBtn = '<a href="' + file.download_url + '" download="' + file.name + '" ' +
+      'style="background:#f1f5f9;color:#374151;border:1px solid #e2e8f0;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;">⬇ Download</a>';
+
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);" ' +
+      'onmouseenter="this.style.borderColor=\'' + color + '\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.08)\'" ' +
+      'onmouseleave="this.style.borderColor=\'#e2e8f0\';this.style.boxShadow=\'0 1px 3px rgba(0,0,0,0.05)\'">' +
+      '<div style="font-size:28px;flex-shrink:0;">' + icon + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:14px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + name + '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">' +
+          '<span style="background:' + badgeBg + ';color:' + badgeColor + ';font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px;">' + badge + '</span>' +
+          '<span style="font-size:11px;color:#94a3b8;">' + size + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-shrink:0;">' + viewBtn + dlBtn + '</div>' +
+    '</div>';
+  });
+
+  html += '</div>';
+  listEl.innerHTML = html;
+}
+
+// ── VIEW MARKDOWN FILE INLINE ─────────────────────────────────────
+function notesViewMd(encodedUrl, filename) {
+  var url = decodeURIComponent(encodedUrl);
+  var viewer      = document.getElementById('notes-viewer');
+  var viewerTitle = document.getElementById('notes-viewer-title');
+  var viewerBody  = document.getElementById('notes-viewer-body');
+  if (!viewer) return;
+
+  viewer.style.display = 'block';
+  if (viewerTitle) viewerTitle.textContent = '📝 ' + filename;
+  if (viewerBody)  viewerBody.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">⏳ Loading...</div>';
+  viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  fetch(url)
+    .then(function(r) { return r.text(); })
+    .then(function(md) {
+      if (viewerBody) viewerBody.innerHTML = notesMdToHtml(md);
+    })
+    .catch(function(err) {
+      if (viewerBody) viewerBody.innerHTML = '<div style="color:#ef4444;">Error loading file: ' + err.message + '</div>';
+    });
+}
+
+// ── SIMPLE MARKDOWN RENDERER ──────────────────────────────────────
+function notesMdToHtml(md) {
+  var html = md
+    // Escape HTML
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    // Headers
+    .replace(/^#### (.+)$/gm,'<h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:16px 0 8px;">$1</h4>')
+    .replace(/^### (.+)$/gm,'<h3 style="font-size:16px;font-weight:700;color:#0f172a;margin:20px 0 8px;">$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2 style="font-size:18px;font-weight:800;color:#0f172a;margin:24px 0 10px;padding-bottom:8px;border-bottom:2px solid #e2e8f0;">$1</h2>')
+    .replace(/^# (.+)$/gm,'<h1 style="font-size:22px;font-weight:900;color:#0f172a;margin:0 0 16px;padding-bottom:12px;border-bottom:3px solid #0f766e;">$1</h1>')
+    // Bold & italic
+    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    // Inline code
+    .replace(/`([^`]+)`/g,'<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:12px;color:#0f766e;">$1</code>')
+    // Code blocks
+    .replace(/```[\w]*\n?([\s\S]*?)```/g,'<pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;overflow-x:auto;font-family:monospace;font-size:12px;line-height:1.8;color:#1e293b;margin:12px 0;">$1</pre>')
+    // Horizontal rule
+    .replace(/^---$/gm,'<hr style="border:none;border-top:2px solid #e2e8f0;margin:20px 0;">')
+    // Blockquote
+    .replace(/^&gt; (.+)$/gm,'<blockquote style="border-left:4px solid #0f766e;background:#f0fdfa;margin:12px 0;padding:10px 16px;border-radius:0 8px 8px 0;color:#334155;">$1</blockquote>')
+    // Unordered lists
+    .replace(/^\s*[-*] (.+)$/gm,'<li style="margin:4px 0;padding-left:4px;">$1</li>')
+    // Ordered lists
+    .replace(/^\d+\. (.+)$/gm,'<li style="margin:4px 0;padding-left:4px;">$1</li>')
+    // Wrap consecutive li in ul
+    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul style="margin:10px 0;padding-left:24px;color:#334155;">$&</ul>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" style="color:#0f766e;font-weight:600;text-decoration:underline;">$1</a>')
+    // Images
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:10px 0;">')
+    // Line breaks (double newline = paragraph)
+    .replace(/\n\n/g,'</p><p style="margin:10px 0;">')
+    // Single newline inside paragraph
+    .replace(/\n/g,'<br>');
+
+  return '<div style="font-family:inherit;">' +
+    '<p style="margin:10px 0;">' + html + '</p>' +
   '</div>';
+}
 
-  notesLoadList();
+// ── CLOSE VIEWER ──────────────────────────────────────────────────
+function notesCloseViewer() {
+  var v = document.getElementById('notes-viewer');
+  if (v) v.style.display = 'none';
+}
+
+// ── REFRESH ───────────────────────────────────────────────────────
+function notesRefresh() {
+  var cfg = {};
+  try { cfg = JSON.parse(localStorage.getItem('devops_notes_cfg') || '{}'); } catch(e) {}
+  if (cfg.repo && cfg.folder) {
+    notesLoadFiles(cfg);
+    showToast('🔄 Refreshing files...', '#0f766e');
+  } else {
+    renderNotesSection();
+  }
 }
 
 // ── Load notes from Firestore ─────────────────────────────────
